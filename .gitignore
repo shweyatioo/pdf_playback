@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.audio-cache/
+.env*
+!.env.example
+tmp/
+*.pdf
+.DS_Store
