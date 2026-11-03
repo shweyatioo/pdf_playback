@@ -38,7 +38,7 @@ export default function App() {
     fetch('/api/voices').then(r => r.json()).then(data => {
       setVoices(data.voices || []);
       setVoice(data.voices?.includes('Samantha') ? 'Samantha' : data.voices?.[0] || '');
-      if (!data.available) setError('The local voice service needs macOS. Start this app on your Mac to generate narration.');
+      if (!data.available) setError('No supported narrator is available. Run on macOS with Samantha, Daniel, or Karen installed, then restart the app.');
     }).catch(() => setError('Cannot reach the audio server. Start the app with npm run dev.'));
   }, []);
   useEffect(() => {
@@ -125,10 +125,17 @@ export default function App() {
     player.src = clip.url; player.load();
   }, [active, clip?.url]);
   useEffect(() => { if (audio.current) audio.current.playbackRate = speed; }, [speed]);
+  function playAudio() {
+    const token = generation.current;
+    void audio.current?.play().catch(error => {
+      if (error.name === 'AbortError' || token !== generation.current) return;
+      wantsPlay.current=false; setPlaying(false); setError('Playback could not start. Press play to try again.');
+    });
+  }
   function toggle() {
     wantsPlay.current = !wantsPlay.current; setPlaying(wantsPlay.current);
     if (!wantsPlay.current) audio.current?.pause();
-    else if (clip) void audio.current?.play().catch(() => { wantsPlay.current=false; setPlaying(false); setError('Playback could not start. Press play to try again.'); });
+    else if (clip) playAudio();
   }
   function seek(index: number, offset = 0) {
     if (!article) return;
@@ -146,7 +153,9 @@ export default function App() {
     for (let i=0;i<durations.length;i++) { if (remaining < durations[i] || i === durations.length-1) { seek(i,remaining); return; } remaining -= durations[i]; }
   }
   function changeVoice(value: string) {
-    wantsPlay.current=false; audio.current?.pause(); setPlaying(false); setClips({}); setVoice(value); pendingOffset.current=0; setPosition(0);
+    generation.current++;
+    audio.current?.pause();
+    setClips({}); setVoice(value); pendingOffset.current=0; setPosition(0);
   }
   function restore(id: string) {
     if (!article) return;
@@ -179,6 +188,6 @@ export default function App() {
         <div className="generation" role="status">{generating?`Preparing audio · ${Object.keys(clips).length}/${article.sentences.length} passages`:ready?'✓ Audio ready · saved on this Mac':'Audio paused'}{playing&&!clip?' · Buffering selected passage…':''}</div>
       </aside>
     </main>}
-    <audio ref={audio} onLoadedMetadata={()=>{const a=audio.current!;a.currentTime=Math.min(pendingOffset.current,a.duration||0);pendingOffset.current=0;a.playbackRate=speed;if(wantsPlay.current) void a.play().catch(()=>{wantsPlay.current=false;setPlaying(false);setError('Press play to start audio.');});}} onTimeUpdate={()=>setPosition(audio.current?.currentTime||0)} onEnded={()=>{if(article&&active<article.sentences.length-1)seek(active+1);else{wantsPlay.current=false;setPlaying(false);seek(0);}}} onError={()=>{if(clip){wantsPlay.current=false;setPlaying(false);setError('Could not load this audio passage. Retry generating it.');}}}/>
+    <audio ref={audio} onLoadedMetadata={()=>{const a=audio.current!;a.currentTime=Math.min(pendingOffset.current,a.duration||0);pendingOffset.current=0;a.playbackRate=speed;if(wantsPlay.current) playAudio();}} onTimeUpdate={()=>setPosition(audio.current?.currentTime||0)} onEnded={()=>{if(article&&active<article.sentences.length-1)seek(active+1);else{wantsPlay.current=false;setPlaying(false);seek(0);}}} onError={()=>{if(clip){wantsPlay.current=false;setPlaying(false);setError('Could not load this audio passage. Retry generating it.');}}}/>
   </div>;
 }
